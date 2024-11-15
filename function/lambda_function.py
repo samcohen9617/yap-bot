@@ -8,6 +8,7 @@ except:
     secrets = None
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
+import random
 
 mongo_uri = secrets.get("MONGO_URI") if secrets else os.environ.get('MONGO_URI')
 pymongo_client = MongoClient(mongo_uri, server_api=ServerApi('1'))
@@ -121,13 +122,12 @@ def create_tweet_on_timeline(testing=True):
         print("Error in creating reply")
 
 
-def get_top_mentions():
+def get_mentions():
     mentions = tweepy_client.get_users_mentions(me.id, user_auth=True, expansions="author_id",
                                                 tweet_fields="public_metrics,conversation_id", max_results=25)
-    mentions.data.sort(key=lambda x: x.public_metrics["like_count"], reverse=True)
-    # top 3 mentions
-    top_mentions = mentions.data[:3]
-    return top_mentions
+    # sample 3 random mentions
+    random_mentions = random.sample(mentions.data, 3)
+    return random_mentions
 
 
 def lambda_handler(event, context):
@@ -136,8 +136,8 @@ def lambda_handler(event, context):
     print("IS TESTING: ", testing)
     
     # Get top mentions
-    top_mentions = get_top_mentions()
-    for mention in top_mentions:
+    mentions = get_mentions()
+    for mention in mentions:
         print("Mentioned in tweet: ", mention.id)
         create_reply_to_tweet(mention.id, mention.text, testing=testing)
 
