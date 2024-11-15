@@ -19,6 +19,8 @@ except Exception as e:
     print(e)
 
 OPENAI_API_KEY = secrets.get("OPENAI_API_KEY") if secrets else os.environ.get('OPENAI_API_KEY')
+OPENAI_ASST_ID = secrets.get("OPENAI_ASSISTANT_ID") if secrets else os.environ.get('OPENAI_ASSISTANT_ID')
+
 
 def make_openai_request(method, endpoint, data=None):
     url = f"https://api.openai.com/v1/{endpoint}"
@@ -76,13 +78,12 @@ def create_run(thread_id, asst_id):
 
 
 THREAD_ID = create_thread()
-ASST_ID = "asst_xUA7sXTOVSGMNtWkBB5UekL0"
 
 
-def create_reply_to_tweet(tweet_id, text):
+def create_reply_to_tweet(tweet_id, text, testing=True):
     create_message(THREAD_ID, f'Respond to this as if it were a twitter reply to your post "{text}"')
 
-    run = create_run(THREAD_ID, ASST_ID)
+    run = create_run(THREAD_ID, OPENAI_ASST_ID)
     while run["status"] != 'completed':
         # wait for 3 seconds
         time.sleep(3)
@@ -91,14 +92,18 @@ def create_reply_to_tweet(tweet_id, text):
     messages = make_openai_request("GET", f"threads/{THREAD_ID}/messages")
     try:
         reply = messages["data"][0]["content"][0]["text"]["value"]
-        post_tweet(reply, tweet_id)
+        if testing:
+            print(reply)
+        else:
+            post_tweet(reply, tweet_id)
+
     except:
         print("Error in creating reply")
 
 
-def create_tweet_on_timeline():
+def create_tweet_on_timeline(testing=True):
     create_message(THREAD_ID, f"Generate a tweet that embodies your values with regards to your knowledge and database, with occasional references to your token, $HOL. Make sure to not use any emojis")
-    run = create_run(THREAD_ID, ASST_ID)
+    run = create_run(THREAD_ID, OPENAI_ASST_ID)
     while run["status"] != 'completed':
         # wait for 3 seconds
         time.sleep(3)
@@ -107,24 +112,34 @@ def create_tweet_on_timeline():
     messages = make_openai_request("GET", f"threads/{THREAD_ID}/messages")
     try:
         tweet = messages["data"][0]["content"][0]["text"]["value"]
-        post_tweet(tweet)
+        if testing:
+            print(tweet)
+        else:
+            post_tweet(tweet)
+
     except:
         print("Error in creating reply")
 
 
-def lambda_handler(event, context):
+def get_top_mentions():
     mentions = tweepy_client.get_users_mentions(me.id, user_auth=True, expansions="author_id",
                                                 tweet_fields="public_metrics,conversation_id", max_results=25)
     mentions.data.sort(key=lambda x: x.public_metrics["like_count"], reverse=True)
-
     # top 3 mentions
     top_mentions = mentions.data[:3]
+    return top_mentions
 
+
+def lambda_handler(event, context):
+    # Get params from event
+    testing = event.get("testing_flag", False)
+    print("IS TESTING: ", testing)
+    
+    # Get top mentions
+    top_mentions = get_top_mentions()
     for mention in top_mentions:
         print("Mentioned in tweet: ", mention.id)
-        public_metrics = mention.public_metrics
-        print("Public metrics: ", public_metrics["like_count"], public_metrics["reply_count"],
-              public_metrics["retweet_count"], public_metrics["quote_count"])
-        create_reply_to_tweet(mention.id, mention.text)
+        create_reply_to_tweet(mention.id, mention.text, testing=testing)
 
-    create_tweet_on_timeline()
+    # Create tweet on timeline
+    create_tweet_on_timeline(testing=testing)
